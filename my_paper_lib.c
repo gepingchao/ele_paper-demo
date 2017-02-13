@@ -17,36 +17,32 @@ S_Save_Data co2_data;
 S_Save_Data pm10_data;
 //S_Save_Data 
 
-unsigned short min_in_graph_buf(void)
+unsigned short min_in_n_buf(unsigned short* buf,unsigned short data_num)
 {
-	unsigned short point = 0;
-	unsigned char tmp = 255;
+	unsigned short tmp = 0XFFFF;
 	unsigned short loopx = 0;
-	for(loopx = 0 ;loopx < MAX_SAVE_DATA_NUM ; loopx++)
+	for(loopx = 0 ;loopx < data_num ; loopx++)
 		{
 			if(tmp > graph_buf.buf[loopx])
 				{
 					tmp = graph_buf.buf[loopx];
-					point = loopx;
 				}
 		}
-	return point;
+	return tmp;
 }
 
-unsigned short max_in_graph_buf(void)
+unsigned short max_in_n_buf(unsigned short* buf,unsigned short data_num)
 {
-	unsigned short point = 0;
 	unsigned char tmp = 0;
 	unsigned short loopx = 0;
-	for(loopx = 0 ;loopx < MAX_SAVE_DATA_NUM ; loopx++)
+	for(loopx = 0 ;loopx < data_num ; loopx++)
 		{
 			if(tmp < graph_buf.buf[loopx])
 				{
 					tmp = graph_buf.buf[loopx];
-					point = loopx;
 				}
 		}
-	return point;
+	return tmp;
 }
 
 unsigned char display_num(unsigned char line_x,unsigned short pixel_y,float num,unsigned char font)
@@ -422,28 +418,60 @@ void set_g_image_buf(unsigned char set_data)
 //
 
 ***********************************/
-void insert_image(unsigned short position_x,unsigned short position_y,unsigned short size_x,unsigned short size_y,unsigned char* image)
+void insert_image(unsigned short line_x,unsigned short pixel_y,unsigned short size_x,unsigned short size_y,unsigned char* image)
 {
-	unsigned short tmp_size_x,tmp_position_x;
+	unsigned short tmp_size_x,tmp_line_x;
 	tmp_size_x = size_x / 8;
-	tmp_position_x = position_x ;//* 8;
+	tmp_line_x = line_x ;//* 8;
 	unsigned short loop_outside,loop_inside;
 	unsigned short position;
 	for(loop_outside = 0 ; loop_outside < size_y; loop_outside++)
 		{
 			for(loop_inside = 0 ; loop_inside < (tmp_size_x ) ; loop_inside ++)
 				{
-					position = (position_y + loop_outside) * (xDot/8) + (tmp_position_x+loop_inside);
+					position = (pixel_y + loop_outside) * (xDot/8) + (tmp_line_x+loop_inside);
 					g_image_buf[position] = image[loop_outside*tmp_size_x + loop_inside];
 				}
 		
 		}
 }
 
+void draw_image(unsigned short pixel_X,unsigned short piexl_y,unsigned short size_x,unsigned short size_y,unsigned char* image,unsigned char draw_type)
+{	
+	unsigned short tmp_size_x;
+	tmp_size_x = size_x / 8;
+	unsigned short loop_inside,loop_outside,loop8;	
+		for(loop_outside = 0 ; loop_outside < size_y; loop_outside++)
+		{
+			for(loop_inside = 0 ; loop_inside < (tmp_size_x) ; loop_inside ++)
+				{
+					for(loop8 = 0 ; loop8 < 8 ; loop8 ++)
+						{
+							if(1 == draw_type)
+								{
+									if(0 == BIT(image[loop_outside*tmp_size_x + loop_inside],loop8))//第loop8位为要显示的点
+										{
+											draw_point((pixel_X + loop_inside*8+loop8),(piexl_y + loop_outside),0);//显示这个点
+										}
+								}
+							if(0 == draw_type)
+								{
+									if(BIT(image[loop_outside*tmp_size_x + loop_inside],loop8))
+										{
+											draw_point((pixel_X + loop_inside*8+loop8),(piexl_y + loop_outside),0);//显示这个点
+										}
+								}
+						}
+				}
+		
+		}
+	
+}
+
 
 void draw_graph()
 {
-	unsigned char base,offset;
+	unsigned char base;
 	unsigned draw_num = 0;
 	graph_buf.mark_flag = 0;
 	base = (xDot -19);
@@ -559,21 +587,21 @@ void draw_graph()
 
 }
 
-void display_graph(unsigned short start_point)
+void display_graph(void)
 {
+	//(void*) data;
 	load_image_to_buf((unsigned char*) gImage_graph);	
-	//draw_graph(start_point);
 	draw_graph();
 	insert_image(1,250,16,38,(unsigned char*)gImage_16_38[3]);
 	
 	insert_image(3,180,16,38,(unsigned char*)gImage_16_38[5]);
-	display_temp(3,180+38,graph_buf.buf[max_in_graph_buf()] ,1);
+	display_temp(3,180+38,graph_buf.max_data,1);
 	
 	insert_image(6,180,16,38,(unsigned char*)gImage_16_38[4]);
-	display_temp(6,180+38,graph_buf.buf[min_in_graph_buf()] ,2);
+	display_temp(6,180+38,graph_buf.min_data,2);
 	
 	insert_image(9,180,16,38,(unsigned char*)gImage_16_38[6]);
-	display_temp(9,180+38,graph_buf.buf[start_point],1);
+	display_temp(9,180+38,graph_buf.buf[0],1);
 	
 	//insert_image(14,1,16,10,(unsigned char*)gImage_16_10[16]);
 	//insert_image(14,20,8,6,(unsigned char*)gImage_8_6[16]);
@@ -596,9 +624,13 @@ void load_data_to_graph_buf(P_S_Save_Data data)
 	unsigned char loopx = data->save_num;
 	data->operat_point = data->point;
 	graph_buf.save_num = data->save_num;
+	graph_buf.max_data = data->max_data;
+	graph_buf.min_data = data->min_data;
 	for(loopx = 0 ; loopx < (data->save_num) ; loopx ++)
 		{
 			graph_buf.buf[loopx] = data->buf[data->operat_point];
+			//graph_buf.buf[loopx] = data->f_change(data->max_data,data->min_data,data->buf[data->operat_point]);
+			graph_buf.data_buf[loopx] = data->buf[data->operat_point];
 			data->operat_point -- ;
 		}
 	
